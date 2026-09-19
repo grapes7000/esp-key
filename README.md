@@ -96,6 +96,31 @@ sudo cryptsetup close esp-key-test
 
 Unplugging the C3 should make a fresh ESP-Key unlock impossible, while the original recovery passphrase should still work.
 
+## Automatic hotplug unlock
+
+`esp-key` can install a small `udev` + `systemd` integration so you do not need to remember the Python unlock command. It identifies the encrypted volume by its permanent LUKS UUID rather than a changing device name such as `/dev/sda`.
+
+Run the installer once while the enrolled volume is connected:
+
+```bash
+sudo .venv/bin/python host/install_autounlock.py /dev/sda --name esp-key-usb
+```
+
+The installer writes:
+
+- `/etc/udev/rules.d/99-esp-key-autounlock.rules`
+- `/etc/systemd/system/esp-key-autounlock.service`
+
+After that, inserting either the enrolled LUKS drive or an Espressif serial device triggers a non-interactive check. The helper only unlocks when both the matching LUKS UUID and a device speaking the ESP-Key protocol are present. It is safe if the C3 is plugged in first or the flash drive is plugged in first.
+
+To remove the integration:
+
+```bash
+sudo .venv/bin/python host/install_autounlock.py --uninstall
+```
+
+Auto-unlock is intentionally **unlock-only** in v0.1. Desktop automount behavior varies by environment, so mounting the resulting `/dev/mapper/<name>` is kept separate for now.
+
 ## Tests
 
 Host tests use Python's standard `unittest` framework:
@@ -104,7 +129,7 @@ Host tests use Python's standard `unittest` framework:
 python -m unittest discover -s tests -v
 ```
 
-They cover deterministic derivation, in-memory key staging, actual buffer zeroization, and the LUKS enrollment/unlock command paths that previously conflicted over stdin.
+They cover deterministic derivation, in-memory key staging, actual buffer zeroization, LUKS enrollment/unlock command paths, and hotplug auto-unlock behavior.
 
 ## Raw key output
 
@@ -124,6 +149,7 @@ v0.1 proves the workflow; it is **not** a hardened hardware security key.
 - There is no user-presence button or PIN yet; possession of the powered device is enough to request HMAC operations.
 - Secure Boot, flash encryption, and eFuse-backed HMAC are intentionally not enabled yet because irreversible eFuse changes should only happen after the basic design is proven.
 - Losing or erasing the C3 secret makes its LUKS keyslot unusable. Keep and verify a separate recovery passphrase.
+- Auto-unlock means possession of both the enrolled drive and this C3 is sufficient to unlock the volume on a configured machine.
 - Do not use v0.1 for irreplaceable or high-value data.
 
 A later hardware-backed version should move the secret behind the ESP32-C3's security hardware and add stronger device/host policy without changing the recovery-key principle.
